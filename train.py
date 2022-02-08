@@ -78,6 +78,7 @@ def train():
             args.dataset_root = COCO_ROOT
         cfg = coco
         dataset = COCODetection(root=args.dataset_root,
+                                image_set='train2017',
                                 transform=SSDAugmentation(cfg['min_dim'],
                                                           MEANS))
     elif args.dataset == 'VOC':
@@ -149,27 +150,38 @@ def train():
     # create batch iterator
     batch_iterator = iter(data_loader)
     for iteration in range(args.start_iter, cfg['max_iter']):
-        if args.visdom and iteration != 0 and (iteration % epoch_size == 0):
-            update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
-                            'append', epoch_size)
+        if iteration != 0 and (iteration % epoch_size == 0):
+            #update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
+            #                'append', epoch_size)
             # reset epoch loss counters
             loc_loss = 0
             conf_loss = 0
             epoch += 1
-
         if iteration in cfg['lr_steps']:
             step_index += 1
             adjust_learning_rate(optimizer, args.gamma, step_index)
 
         # load train data
-        images, targets = next(batch_iterator)
+        try:
+            images, targets = next(batch_iterator)
+        except StopIteration:
+            batch_iterator = iter(data_loader)
+            images, targets = next(batch_iterator)
 
         if args.cuda:
-            images = Variable(images.cuda())
-            targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
+            # images = Variable(images.cuda())
+            # targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
+            with torch.no_grad():
+                images = Variable(images.float().cuda())
+                targets = [Variable(ann.cuda()) for ann in targets]
+                
         else:
-            images = Variable(images)
-            targets = [Variable(ann, volatile=True) for ann in targets]
+            # images = Variable(images)
+            # targets = [Variable(ann, volatile=True) for ann in targets]
+            with torch.no_grad():
+                images = Variable(images)
+                targets = [Variable(ann) for ann in targets]
+        
         # forward
         t0 = time.time()
         out = net(images)
@@ -180,12 +192,15 @@ def train():
         loss.backward()
         optimizer.step()
         t1 = time.time()
-        loc_loss += loss_l.data[0]
-        conf_loss += loss_c.data[0]
+        #loc_loss += loss_l.data[0]
+        #conf_loss += loss_c.data[0]
+        loc_loss += loss_l.item()
+        conf_loss += loss_c.item()
 
         if iteration % 10 == 0:
             print('timer: %.4f sec.' % (t1 - t0))
-            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
+            #print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
+            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.item()), end=' ')
 
         if args.visdom:
             update_vis_plot(iteration, loss_l.data[0], loss_c.data[0],
