@@ -15,6 +15,8 @@ import torch.utils.data as data
 import numpy as np
 import argparse
 
+#from data import BaseTransformTesting, COCODetectionTesting
+from eval_coco import test_net
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -23,9 +25,9 @@ def str2bool(v):
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
 train_set = parser.add_mutually_exclusive_group()
-parser.add_argument('--dataset', default='VOC', choices=['VOC', 'COCO'],
+parser.add_argument('--dataset', default='COCO', choices=['VOC', 'COCO'],
                     type=str, help='VOC or COCO')
-parser.add_argument('--dataset_root', default=VOC_ROOT,
+parser.add_argument('--dataset_root', default='/media/apple/Datasets/coco/',
                     help='Dataset root directory path')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
                     help='Pretrained base model')
@@ -66,8 +68,8 @@ if torch.cuda.is_available():
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
-if not os.path.exists(args.save_folder):
-    os.mkdir(args.save_folder)
+#if not os.path.exists(args.save_folder):
+#    os.mkdir(args.save_folder)
 
 
 def train():
@@ -90,6 +92,9 @@ def train():
         dataset = VOCDetection(root=args.dataset_root,
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS))
+
+    # eval data
+    testset = COCODetectionTesting(args.dataset_root, [('2017', 'val')], None)
 
     output_folder = os.path.join(args.save_folder, args.exp_name)
     if not os.path.exists(output_folder):
@@ -157,6 +162,8 @@ def train():
     # create batch iterator
     batch_iterator = iter(data_loader)
     for iteration in range(args.start_iter, cfg['max_iter']):
+        #if iteration < 4990:
+        #    continue
         if iteration != 0 and (iteration % epoch_size == 0):
             #update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
             #                'append', epoch_size)
@@ -214,9 +221,20 @@ def train():
                             iter_plot, epoch_plot, 'append')
 
         if iteration != 0 and iteration % 5000 == 0:
+	
             print('Saving state, iter:', iteration)
-            torch.save(ssd_net.state_dict(), os.path.join(output_folder, 'ssd300_'+ args.dataset + '_' +
-                       repr(iteration) + '.pth'))
+            checkpoint_path = os.path.join(output_folder, 'ssd300_'+ args.dataset + '_' + repr(iteration) + '.pth')
+            #torch.save(ssd_net.state_dict(), os.path.join(output_folder, 'ssd300_'+ args.dataset + '_' +
+            #           repr(iteration) + '.pth'))
+            torch.save(ssd_net.state_dict(), checkpoint_path)
+
+            # Do the eval every 5000 iterations
+            test_net(output_folder, checkpoint_path, args.cuda, testset,
+                 BaseTransformTesting(300, rgb_means=(123, 117, 104), rgb_std=(1, 1, 1), swap=(2, 0, 1)))
+            
+
+
+
     torch.save(ssd_net.state_dict(), os.path.join(output_folder, 
                'ssd300_' + args.dataset + '_final.pth'))
 
