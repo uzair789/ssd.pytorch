@@ -49,8 +49,10 @@ parser.add_argument('--gamma', default=0.1, type=float,
                     help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
-parser.add_argument('--save_folder', default='weights/',
+parser.add_argument('--save_folder', default='results/',
                     help='Directory for saving checkpoint models')
+parser.add_argument('--exp_name', default='dummy',
+                    help='Name of the experiment folder in results/')
 args = parser.parse_args()
 
 
@@ -89,6 +91,10 @@ def train():
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS))
 
+    output_folder = os.path.join(args.save_folder, args.exp_name)
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
     if args.visdom:
         import visdom
         viz = visdom.Visdom()
@@ -104,7 +110,8 @@ def train():
         print('Resuming training, loading {}...'.format(args.resume))
         ssd_net.load_weights(args.resume)
     else:
-        vgg_weights = torch.load(args.save_folder + args.basenet)
+        #vgg_weights = torch.load(args.save_folder + args.basenet)
+        vgg_weights = torch.load('weights/' + args.basenet)
         print('Loading base network...')
         ssd_net.vgg.load_state_dict(vgg_weights)
 
@@ -208,10 +215,10 @@ def train():
 
         if iteration != 0 and iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(ssd_net.state_dict(), 'weights/ssd300_COCO_' +
-                       repr(iteration) + '.pth')
-    torch.save(ssd_net.state_dict(),
-               args.save_folder + '' + args.dataset + '.pth')
+            torch.save(ssd_net.state_dict(), os.path.join(output_folder, 'ssd300_'+ args.dataset + '_' +
+                       repr(iteration) + '.pth'))
+    torch.save(ssd_net.state_dict(), os.path.join(output_folder, 
+               'ssd300_' + args.dataset + '_final.pth'))
 
 
 def adjust_learning_rate(optimizer, gamma, step):
