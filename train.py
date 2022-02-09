@@ -15,7 +15,7 @@ import torch.utils.data as data
 import numpy as np
 import argparse
 
-#from data import BaseTransformTesting, COCODetectionTesting
+import neptune
 from eval_coco import test_net
 
 def str2bool(v):
@@ -25,10 +25,6 @@ def str2bool(v):
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
 train_set = parser.add_mutually_exclusive_group()
-parser.add_argument('--dataset', default='COCO', choices=['VOC', 'COCO'],
-                    type=str, help='VOC or COCO')
-parser.add_argument('--dataset_root', default='/media/apple/Datasets/coco/',
-                    help='Dataset root directory path')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
                     help='Pretrained base model')
 parser.add_argument('--batch_size', default=32, type=int,
@@ -53,10 +49,13 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='results/',
                     help='Directory for saving checkpoint models')
-parser.add_argument('--exp_name', default='dummy',
+parser.add_argument('--exp_name', default='SSD300_fp_teacher',
                     help='Name of the experiment folder in results/')
+parser.add_argument('--dataset', default='COCO', choices=['VOC', 'COCO'],
+                    type=str, help='VOC or COCO')
+parser.add_argument('--dataset_root', default='/media/apple/Datasets/coco/',
+                    help='Dataset root directory path')
 args = parser.parse_args()
-
 
 if torch.cuda.is_available():
     if args.cuda:
@@ -70,6 +69,17 @@ else:
 
 #if not os.path.exists(args.save_folder):
 #    os.mkdir(args.save_folder)
+
+# initilize neptune
+neptune.init('uzair789/Distillation')
+
+PARAMS = {'dataset': args.dataset,
+           'exp_name': args.exp_name,
+            'batch_size': args.batch_size}
+
+
+exp = neptune.create_experiment(name=args.exp_name, params=PARAMS, tags=['SSD300', 'full_precision',                                               
+                                                                           'COCO', 'Sierra'])                          
 
 
 def train():
@@ -164,6 +174,14 @@ def train():
     for iteration in range(args.start_iter, cfg['max_iter']):
         #if iteration < 4990:
         #    continue
+        exp.log_metric('Current lr', float(optimizer.param_groups[0]['lr']))                                                
+        exp.log_metric('Current epoch', int(epoch))               
+        exp.log_metric('Current iteration', int(iteration))               
+
+        print('Current lr', float(optimizer.param_groups[0]['lr']))                                                
+        print('Current epoch', int(epoch))               
+        print('Current iteration', int(iteration))               
+
         if iteration != 0 and (iteration % epoch_size == 0):
             #update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
             #                'append', epoch_size)
@@ -211,6 +229,14 @@ def train():
         loc_loss += loss_l.item()
         conf_loss += loss_c.item()
 
+        exp.log_metric('loc loss', loss_l.item())               
+        exp.log_metric('conf loss', loss_c.item())               
+        exp.log_metric('total loss', loss.item())
+        print('loc loss', loss_l.item())               
+        print('conf loss', loss_c.item())               
+        print('total loss', loss.item())
+        print('---')
+               
         if iteration % 10 == 0:
             print('timer: %.4f sec.' % (t1 - t0))
             #print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
