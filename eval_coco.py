@@ -22,7 +22,7 @@ import pickle
 import argparse
 import numpy as np
 
-#os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '4'
 
 
 def str2bool(v):
@@ -50,7 +50,7 @@ parser.add_argument('--retest', default=False, type=str2bool,
                     help='test the result on result file')
 
 args = parser.parse_args()
-
+args.retest = True
 if not os.path.exists(args.save_folder):
     os.makedirs(args.save_folder)
 
@@ -91,8 +91,8 @@ class Timer(object):
             return self.diff
 
 
-def test_net(save_folder, checkpoint_path, cuda, testset, transform):
-    
+def test_net(save_folder, checkpoint_path, cuda, testset, transform, exp=None):
+
     print('Load model for evaluation..')
     net = build_ssd(phase='test', size=300, num_classes=81)
     net.cuda()
@@ -118,7 +118,12 @@ def test_net(save_folder, checkpoint_path, cuda, testset, transform):
             f = open(det_file, 'rb')
             all_boxes = pickle.load(f)
             print('Evaluating detections')
-            testset.evaluate_detections(all_boxes, save_folder)
+            summary = testset.evaluate_detections(all_boxes, save_folder)
+
+            if exp:
+                exp.log_metric('Validation: ap1', float(summary[0]))
+                exp.log_metric('Validation: IOU_0.5', float(summary[1]))
+                exp.log_metric('Validation: IOU_0.75', float(summary[2]))
             return
 
         for i in range(num_images):
@@ -157,7 +162,12 @@ def test_net(save_folder, checkpoint_path, cuda, testset, transform):
 
         print('file saved at' , det_file)
         print('Evaluating detections')
-        testset.evaluate_detections(all_boxes, save_folder)
+        summary = testset.evaluate_detections(all_boxes, save_folder)
+
+        if exp:
+            exp.log_metric('Validation: ap1', float(summary[0]))
+            exp.log_metric('Validation: IOU_0.5', float(summary[1]))
+            exp.log_metric('Validation: IOU_0.75', float(summary[2]))
 
 
 if __name__ == '__main__':
@@ -175,7 +185,7 @@ if __name__ == '__main__':
         net.load_state_dict(torch.load(args.weight_path))
     #net.eval()
     print('Finished loading model!')
-    
+
     # load data
     testset = COCODetectionTesting(args.coco_root, [('2014', 'minival')], None)
 
@@ -185,10 +195,19 @@ if __name__ == '__main__':
     #         BaseTransformTesting(300, rgb_means=(123, 117, 104), rgb_std=(1, 1, 1), swap=(2, 0, 1)))
     '''
 
+    # check for eval logging
+    import neptune
+    neptune.init('uzair789/Distillation')
+    exp = neptune.create_experiment(name='test eval')
+
+
     testset = COCODetectionTesting('/media/apple/Datasets/coco', [('2017', 'val')], None)
-    output_folder = 'results/dummy/'
+    output_folder = 'results/SSD300_fp_teacher/'
     args.dataset= 'COCO'
-    checkpoint_path = os.path.join(output_folder, 'ssd300_'+ args.dataset + '_' + repr(5000) + '.pth')
-    test_net(output_folder, checkpoint_path, args.cuda, testset,
-                  BaseTransformTesting(300, rgb_means=(123, 117, 104), rgb_std=(1, 1, 1), swap=(2, 0, 1))) 
+    checkpoint_path = os.path.join(output_folder, 'ssd300_'+ args.dataset + '_' + repr(95000) + '.pth')
+    test_net(output_folder, checkpoint_path,
+             args.cuda, testset,
+             BaseTransformTesting(300, rgb_means=(123, 117, 104),
+                                  rgb_std=(1, 1, 1), swap=(2, 0, 1)),
+             exp)
 

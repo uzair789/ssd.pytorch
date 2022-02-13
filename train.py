@@ -18,6 +18,7 @@ import argparse
 import neptune
 from eval_coco import test_net
 
+
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
@@ -67,19 +68,25 @@ if torch.cuda.is_available():
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
-#if not os.path.exists(args.save_folder):
+# if not os.path.exists(args.save_folder):
 #    os.mkdir(args.save_folder)
 
 # initilize neptune
 neptune.init('uzair789/Distillation')
 
 PARAMS = {'dataset': args.dataset,
-           'exp_name': args.exp_name,
-            'batch_size': args.batch_size}
+          'exp_name': args.exp_name,
+          'batch_size': args.batch_size}
 
 
-exp = neptune.create_experiment(name=args.exp_name, params=PARAMS, tags=['SSD300', 'full_precision',                                               
-                                                                           'COCO', 'Sierra'])                          
+exp = neptune.create_experiment(
+    name=args.exp_name,
+    params=PARAMS,
+    tags=[
+        'SSD300',
+        'full_precision',
+        'COCO',
+        'Sierra'])
 
 
 def train():
@@ -172,18 +179,18 @@ def train():
     # create batch iterator
     batch_iterator = iter(data_loader)
     for iteration in range(args.start_iter, cfg['max_iter']):
-        #if iteration < 4990:
+        # if iteration < 4990:
         #    continue
-        exp.log_metric('Current lr', float(optimizer.param_groups[0]['lr']))                                                
-        exp.log_metric('Current epoch', int(epoch))               
-        exp.log_metric('Current iteration', int(iteration))               
+        exp.log_metric('Current lr', float(optimizer.param_groups[0]['lr']))
+        exp.log_metric('Current epoch', int(epoch))
+        exp.log_metric('Current iteration', int(iteration))
 
-        print('Current lr', float(optimizer.param_groups[0]['lr']))                                                
-        print('Current epoch', int(epoch))               
-        print('Current iteration', int(iteration))               
+        print('Current lr', float(optimizer.param_groups[0]['lr']))
+        print('Current epoch', int(epoch))
+        print('Current iteration', int(iteration))
 
         if iteration != 0 and (iteration % epoch_size == 0):
-            #update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
+            # update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
             #                'append', epoch_size)
             # reset epoch loss counters
             loc_loss = 0
@@ -206,14 +213,14 @@ def train():
             with torch.no_grad():
                 images = Variable(images.float().cuda())
                 targets = [Variable(ann.cuda()) for ann in targets]
-                
+
         else:
             # images = Variable(images)
             # targets = [Variable(ann, volatile=True) for ann in targets]
             with torch.no_grad():
                 images = Variable(images)
                 targets = [Variable(ann) for ann in targets]
-        
+
         # forward
         t0 = time.time()
         out = net(images)
@@ -229,39 +236,51 @@ def train():
         loc_loss += loss_l.item()
         conf_loss += loss_c.item()
 
-        exp.log_metric('loc loss', loss_l.item())               
-        exp.log_metric('conf loss', loss_c.item())               
+        exp.log_metric('loc loss', loss_l.item())
+        exp.log_metric('conf loss', loss_c.item())
         exp.log_metric('total loss', loss.item())
-        print('loc loss', loss_l.item())               
-        print('conf loss', loss_c.item())               
+        print('loc loss', loss_l.item())
+        print('conf loss', loss_c.item())
         print('total loss', loss.item())
         print('---')
-               
+
         if iteration % 10 == 0:
             print('timer: %.4f sec.' % (t1 - t0))
             #print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
-            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.item()), end=' ')
+            print(
+                'iter ' +
+                repr(iteration) +
+                ' || Loss: %.4f ||' %
+                (loss.item()),
+                end=' ')
 
         if args.visdom:
             update_vis_plot(iteration, loss_l.data[0], loss_c.data[0],
                             iter_plot, epoch_plot, 'append')
 
         if iteration != 0 and iteration % 5000 == 0:
-	
+
             print('Saving state, iter:', iteration)
-            checkpoint_path = os.path.join(output_folder, 'ssd300_'+ args.dataset + '_' + repr(iteration) + '.pth')
-            #torch.save(ssd_net.state_dict(), os.path.join(output_folder, 'ssd300_'+ args.dataset + '_' +
+            checkpoint_path = os.path.join(
+                output_folder,
+                'ssd300_' +
+                args.dataset +
+                '_' +
+                repr(iteration) +
+                '.pth')
+            # torch.save(ssd_net.state_dict(), os.path.join(output_folder, 'ssd300_'+ args.dataset + '_' +
             #           repr(iteration) + '.pth'))
             torch.save(ssd_net.state_dict(), checkpoint_path)
 
             # Do the eval every 5000 iterations
-            test_net(output_folder, checkpoint_path, args.cuda, testset,
-                 BaseTransformTesting(300, rgb_means=(123, 117, 104), rgb_std=(1, 1, 1), swap=(2, 0, 1)))
-            
+            test_net(
+                output_folder, checkpoint_path, args.cuda, testset, BaseTransformTesting(
+                    300, rgb_means=(
+                        123, 117, 104), rgb_std=(
+                        1, 1, 1), swap=(
+                        2, 0, 1)))
 
-
-
-    torch.save(ssd_net.state_dict(), os.path.join(output_folder, 
+    torch.save(ssd_net.state_dict(), os.path.join(output_folder,
                'ssd300_' + args.dataset + '_final.pth'))
 
 
@@ -301,12 +320,9 @@ def create_vis_plot(_xlabel, _ylabel, _title, _legend):
 
 def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
                     epoch_size=1):
-    viz.line(
-        X=torch.ones((1, 3)).cpu() * iteration,
-        Y=torch.Tensor([loc, conf, loc + conf]).unsqueeze(0).cpu() / epoch_size,
-        win=window1,
-        update=update_type
-    )
+    viz.line(X=torch.ones((1, 3)).cpu() * iteration,
+             Y=torch.Tensor([loc, conf, loc + conf]).unsqueeze(0).cpu() /
+             epoch_size, win=window1, update=update_type)
     # initialize epoch plot on first iteration
     if iteration == 0:
         viz.line(

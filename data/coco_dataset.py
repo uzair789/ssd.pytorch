@@ -46,7 +46,10 @@ class BaseTransformTesting(object):
 
     # assume input is cv2 img for now
     def __call__(self, img):
-        img = cv2.resize(np.array(img), (self.resize, self.resize)).astype(np.float32)
+        img = cv2.resize(
+            np.array(img),
+            (self.resize, self.resize)).astype(
+            np.float32)
         img -= self.means
         img /= self.std
         img = img.transpose(self.swap)
@@ -96,18 +99,24 @@ class COCODetectionTesting(data.Dataset):
             self._COCO = _COCO
             self.coco_name = coco_name
             cats = _COCO.loadCats(_COCO.getCatIds())
-            self._classes = tuple(['__background__'] + [c['name'] for c in cats])
+            self._classes = tuple(['__background__'] +
+                                  [c['name'] for c in cats])
             self.num_classes = len(self._classes)
-            self._class_to_ind = dict(zip(self._classes, range(self.num_classes)))
+            self._class_to_ind = dict(
+                zip(self._classes, range(self.num_classes)))
             self._class_to_coco_cat_id = dict(zip([c['name'] for c in cats],
                                                   _COCO.getCatIds()))
             indexes = _COCO.getImgIds()
             self.image_indexes = indexes
-            self.ids.extend([self.image_path_from_index(data_name, index) for index in indexes])
+            self.ids.extend(
+                [self.image_path_from_index(data_name, index)
+                 for index in indexes])
             if image_set.find('test') != -1:
                 print('test set will not load annotations!')
             else:
-                self.annotations.extend(self._load_coco_annotations(coco_name, indexes, _COCO))
+                self.annotations.extend(
+                    self._load_coco_annotations(
+                        coco_name, indexes, _COCO))
 
     def image_path_from_index(self, name, index):
         """
@@ -268,12 +277,16 @@ class COCODetectionTesting(data.Dataset):
             if cls == '__background__':
                 continue
             # minus 1 because of __background__
-            precision = coco_eval.eval['precision'][ind_lo:(ind_hi + 1), :, cls_ind - 1, 0, 2]
+            precision = coco_eval.eval['precision'][
+                ind_lo: (ind_hi + 1),
+                :, cls_ind - 1, 0, 2]
             ap = np.mean(precision[precision > -1])
             print('{:.1f}'.format(100 * ap))
 
         print('~~~~ Summary metrics ~~~~')
         coco_eval.summarize()
+        summary = coco_eval.stats
+        return summary
 
     def _do_detection_eval(self, res_file, output_dir):
         ann_type = 'bbox'
@@ -282,11 +295,12 @@ class COCODetectionTesting(data.Dataset):
         coco_eval.params.useSegm = (ann_type == 'segm')
         coco_eval.evaluate()
         coco_eval.accumulate()
-        self._print_detection_eval_metrics(coco_eval)
+        summary = self._print_detection_eval_metrics(coco_eval)
         eval_file = os.path.join(output_dir, 'detection_results.pkl')
         with open(eval_file, 'wb') as fid:
             pickle.dump(coco_eval, fid, pickle.HIGHEST_PROTOCOL)
         print('Wrote COCO eval results to: {}'.format(eval_file))
+        return summary
 
     def _coco_results_one_category(self, boxes, cat_id):
         results = []
@@ -342,5 +356,5 @@ class COCODetectionTesting(data.Dataset):
         self._write_coco_results_file(all_boxes, res_file)
         # Only do evaluation on non-test sets
         if self.coco_name.find('test') == -1:
-            self._do_detection_eval(res_file, output_dir)
+            return self._do_detection_eval(res_file, output_dir)
         # Optionally cleanup results json file
