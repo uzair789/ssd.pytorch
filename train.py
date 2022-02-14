@@ -2,6 +2,7 @@ from data import *
 from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
+from binary_ssd import build_binary_ssd
 import os
 import sys
 import time
@@ -50,7 +51,7 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='results/',
                     help='Directory for saving checkpoint models')
-parser.add_argument('--exp_name', default='SSD300_fp_teacher',
+parser.add_argument('--exp_name', default='SSD300_binary_student',
                     help='Name of the experiment folder in results/')
 parser.add_argument('--dataset', default='COCO', choices=['VOC', 'COCO'],
                     type=str, help='VOC or COCO')
@@ -84,7 +85,7 @@ exp = neptune.create_experiment(
     params=PARAMS,
     tags=[
         'SSD300',
-        'full_precision',
+        'binary',
         'COCO',
         'Sierra'])
 
@@ -121,7 +122,8 @@ def train():
         import visdom
         viz = visdom.Visdom()
 
-    ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
+    #ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
+    ssd_net = build_binary_ssd('train', cfg['min_dim'], cfg['num_classes'])
     net = ssd_net
 
     if args.cuda:
@@ -135,7 +137,9 @@ def train():
         #vgg_weights = torch.load(args.save_folder + args.basenet)
         vgg_weights = torch.load('weights/' + args.basenet)
         print('Loading base network...')
-        ssd_net.vgg.load_state_dict(vgg_weights)
+        print('keys in state dict')
+        print(vgg_weights.keys())
+        ssd_net.vgg.load_state_dict(vgg_weights, strict=False)
 
     if args.cuda:
         net = net.cuda()
