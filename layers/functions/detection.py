@@ -2,7 +2,7 @@ import torch
 from torch.autograd import Function
 from ..box_utils import decode, nms
 from data import voc as cfg
-
+from icecream import ic
 
 #class Detect(Function):
 class Detect:

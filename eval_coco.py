@@ -10,7 +10,7 @@ from torch.autograd import Variable
 from data.coco_dataset import BaseTransformTesting, COCODetectionTesting
 from data import COCO_CLASSES as labelmap
 
-#from bidet_ssd import build_bidet_ssd
+from binary_ssd import build_binary_ssd
 from ssd import build_ssd
 
 import os
@@ -50,7 +50,6 @@ parser.add_argument('--retest', default=False, type=str2bool,
                     help='test the result on result file')
 
 args = parser.parse_args()
-args.retest = True
 if not os.path.exists(args.save_folder):
     os.makedirs(args.save_folder)
 
@@ -94,7 +93,8 @@ class Timer(object):
 def test_net(save_folder, checkpoint_path, cuda, testset, transform, exp=None):
 
     print('Load model for evaluation..')
-    net = build_ssd(phase='test', size=300, num_classes=81)
+    net = build_binary_ssd(phase='test', size=300, num_classes=81)
+    #net = build_ssd(phase='test', size=300, num_classes=81)
     net.cuda()
     cudnn.benchmark = True
     checkpoint = torch.load(checkpoint_path)
@@ -202,9 +202,10 @@ if __name__ == '__main__':
 
 
     testset = COCODetectionTesting('/media/apple/Datasets/coco', [('2017', 'val')], None)
-    output_folder = 'results/SSD300_fp_teacher/'
+    output_folder = 'results/SSD300_binary_student/'
+    #output_folder = 'results/SSD300_fp_teacher/'
     args.dataset= 'COCO'
-    checkpoint_path = os.path.join(output_folder, 'ssd300_'+ args.dataset + '_' + repr(95000) + '.pth')
+    checkpoint_path = os.path.join(output_folder, 'ssd300_'+ args.dataset + '_' + repr(5000) + '.pth')
     test_net(output_folder, checkpoint_path,
              args.cuda, testset,
              BaseTransformTesting(300, rgb_means=(123, 117, 104),

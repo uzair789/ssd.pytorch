@@ -6,6 +6,7 @@ from layers import *
 from data import voc, coco
 import os
 
+from icecream import ic
 
 class SSD(nn.Module):
     """Single Shot Multibox Architecture
@@ -171,11 +172,14 @@ def multibox(vgg, extra_layers, cfg, num_classes):
     conf_layers = []
     vgg_source = [21, -2]
     for k, v in enumerate(vgg_source):
+        channel = vgg[v].out_channels
         loc_layers += [nn.Conv2d(vgg[v].out_channels,
                                  cfg[k] * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(vgg[v].out_channels,
                         cfg[k] * num_classes, kernel_size=3, padding=1)]
+
     for k, v in enumerate(extra_layers[1::2], 2):
+        channel = v.out_channels
         loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                  * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(v.out_channels, cfg[k]

@@ -185,6 +185,7 @@ def train():
     for iteration in range(args.start_iter, cfg['max_iter']):
         # if iteration < 4990:
         #    continue
+        net.train()
         exp.log_metric('Current lr', float(optimizer.param_groups[0]['lr']))
         exp.log_metric('Current epoch', int(epoch))
         exp.log_metric('Current iteration', int(iteration))
@@ -277,12 +278,12 @@ def train():
             torch.save(ssd_net.state_dict(), checkpoint_path)
 
             # Do the eval every 5000 iterations
-            test_net(
-                output_folder, checkpoint_path, args.cuda, testset, BaseTransformTesting(
-                    300, rgb_means=(
-                        123, 117, 104), rgb_std=(
-                        1, 1, 1), swap=(
-                        2, 0, 1)))
+            #test_net(
+            #    output_folder, checkpoint_path, args.cuda, testset, BaseTransformTesting(
+            #        300, rgb_means=(
+            #            123, 117, 104), rgb_std=(
+            #            1, 1, 1), swap=(
+            #            2, 0, 1)))
 
     torch.save(ssd_net.state_dict(), os.path.join(output_folder,
                'ssd300_' + args.dataset + '_final.pth'))
