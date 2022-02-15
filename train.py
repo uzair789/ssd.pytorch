@@ -51,7 +51,7 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='results/',
                     help='Directory for saving checkpoint models')
-parser.add_argument('--exp_name', default='SSD300_binary_student',
+parser.add_argument('--exp_name', default='SSD300_binary_student_backbone_no_skip',
                     help='Name of the experiment folder in results/')
 parser.add_argument('--dataset', default='COCO', choices=['VOC', 'COCO'],
                     type=str, help='VOC or COCO')
