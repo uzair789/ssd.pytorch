@@ -22,7 +22,7 @@ import pickle
 import argparse
 import numpy as np
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '3'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 
 def str2bool(v):
@@ -159,7 +159,10 @@ def test_net(save_folder, checkpoint_path, cuda, testset, transform, exp=None, b
                                       scores[:, np.newaxis])).astype(np.float32, copy=False)
                 all_boxes[j][i] = cls_dets
 
-            print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1, num_images, detect_time), end='\r')
+            print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
+                                                        num_images,
+                                                        detect_time),
+                  end='\r')
 
         with open(det_file, 'wb') as f:
             pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
@@ -200,6 +203,7 @@ if __name__ == '__main__':
     '''
 
     # check for eval logging
+
     import neptune
     #neptune.init('uzair789/Distillation')
     #exp = neptune.create_experiment(name='test eval')
@@ -207,15 +211,18 @@ if __name__ == '__main__':
                         api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5haSIsImFwaV91cmwiOiJodHRwczovL3VpLm5lcHR1bmUuYWkiLCJhcGlfa2V5IjoiY2JkOWE3YTktNmFmNi00OWRmLWJmYmUtY2U4MzdkNmM5Y2VlIn0=')
 
     #exp = project.get_experiments(id='DIS-755').pop()
-    exp = project.get_experiments(id='DIS-804').pop()
+
+    exp = project.get_experiments(id='DIS-806').pop()
     exp_name = exp.get_parameters()['exp_name']
 
-
+    exp=None
     testset = COCODetectionTesting('/media/apple/Datasets/coco', [('2017', 'val')], None)
     #output_folder = 'results/SSD300_binary_student/'
     output_folder = 'results/{}/'.format(exp_name)
     args.dataset= 'COCO'
+    print(output_folder)
 
+    """
     checkpoint_suffixes = [x for x in range(5000, 399000, 5000)] + ["final"]
 
     for i, suffix in enumerate(checkpoint_suffixes):
@@ -228,4 +235,13 @@ if __name__ == '__main__':
                                     rgb_std=(1, 1, 1), swap=(2, 0, 1)),
                 exp,
                 binary=True)
-
+    """
+    suffix = 'final'
+    checkpoint_path = os.path.join(output_folder,
+                                       'ssd300_'+ args.dataset + '_' + str(suffix) + '.pth')
+    test_net(output_folder, checkpoint_path,
+                args.cuda, testset,
+                BaseTransformTesting(300, rgb_means=(123, 117, 104),
+                                    rgb_std=(1, 1, 1), swap=(2, 0, 1)),
+                exp,
+                binary=True)

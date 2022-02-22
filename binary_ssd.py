@@ -40,10 +40,10 @@ class BasicBlock(nn.Module):
         out = self.binary_conv(out)
         out = self.bn1(out)
 
-        #if self.downsample is not None:
-        #    residual = self.downsample(x)
+        if self.downsample is not None:
+            residual = self.downsample(x)
 
-        #out += residual
+        out += residual
 
         return out
 
