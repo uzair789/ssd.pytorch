@@ -22,7 +22,7 @@ import pickle
 import argparse
 import numpy as np
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+#os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 
 def str2bool(v):

@@ -17,8 +17,9 @@ import numpy as np
 import argparse
 
 import neptune
-from eval_coco import test_net
-
+#from eval_coco import test_net
+from icecream import ic
+from collections import OrderedDict
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -51,12 +52,20 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='results/',
                     help='Directory for saving checkpoint models')
-parser.add_argument('--exp_name', default='SSD300_binary_student_backbone_no_skip',
+parser.add_argument('--exp_name', default='distillation_SSD300_binary_student_backbone_no_skip',
                     help='Name of the experiment folder in results/')
 parser.add_argument('--dataset', default='COCO', choices=['VOC', 'COCO'],
                     type=str, help='VOC or COCO')
 parser.add_argument('--dataset_root', default='/media/apple/Datasets/coco/',
                     help='Dataset root directory path')
+parser.add_argument('--cdc', default=1, type=int,
+                    help='coefficient for classification distillation')
+parser.add_argument('--rdc', default=1, type=int,
+                    help='coefficient for localization distillation')
+parser.add_argument('--normalization', default=True, type=str2bool,
+                    help='normalization in the distillation')
+parser.add_argument('--change_teacher', default=True, type=str2bool,
+                    help='change_teacher')
 args = parser.parse_args()
 
 if torch.cuda.is_available():
@@ -73,13 +82,16 @@ else:
 #    os.mkdir(args.save_folder)
 
 # initilize neptune
+print('INIT')
 neptune.init('uzair789/Distillation')
 
 PARAMS = {'dataset': args.dataset,
           'exp_name': args.exp_name,
-          'batch_size': args.batch_size}
+          'batch_size': args.batch_size,
+          'cdc': args.cdc,
+          'rdc': args.rdc}
 
-
+print("CREATE EXP")
 exp = neptune.create_experiment(
     name=args.exp_name,
     params=PARAMS,
@@ -89,6 +101,66 @@ exp = neptune.create_experiment(
         'COCO',
         'Sierra'])
 
+def load_teacher_student(student, cfg):
+    """ Funtion to initilize the student with a pretrained checkpoint and also
+    load the teacher"""
+    teacher_folder = 'results/SSD300_fp_teacher'
+    teacher_checkpoint_path = os.path.join(teacher_folder,
+                                           'ssd300_COCO_final.pth')
+    teacher_checkpoint = torch.load(teacher_checkpoint_path)
+    teacher_ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
+    teacher_ssd_net.load_state_dict(teacher_checkpoint)
+    print('Teacher loaded! ', teacher_checkpoint_path)
+
+    # Init student
+    student_folder = 'results/SSD300_binary_student'
+    student_checkpoint_path = os.path.join(student_folder,
+                                           'ssd300_COCO_final.pth')
+    student_checkpoint = torch.load(student_checkpoint_path)
+    student.load_state_dict(student_checkpoint)
+    print('Student Init successful with ', student_checkpoint_path)
+    return teacher_ssd_net, student
+
+def nlm(teacher, student):
+    """Distillation loss
+    teacher = []
+    student = []
+
+    Returns:
+        loss value (float)
+    """
+    #ic(teacher.shape)
+    #ic(student.shape)
+
+    reg_output = student[0]
+    reg_output_teacher = teacher[0]
+    class_output = student[1]
+    class_output_teacher = teacher[1]
+
+    c_loss_distill = 0
+    reg_loss_distill = 0
+    for i in range(args.batch_size):
+        if args.normalization:
+            class_teacher = class_output_teacher[i]/ torch.norm(class_output_teacher[i])
+            reg_teacher = reg_output_teacher[i] / torch.norm(reg_output_teacher[i])
+            class_student = class_output[i] / torch.norm(class_output[i])
+            reg_student = reg_output[i] / torch.norm(reg_output[i])
+        else:
+            class_teacher = class_output_teacher[i]
+            reg_teacher = reg_output_teacher[i]
+            class_student = class_output[i]
+            reg_student = reg_output[i]
+
+        c_loss = torch.norm(class_teacher - class_student)
+        r_loss = torch.norm(reg_teacher - reg_student)
+
+        c_loss_distill += c_loss
+        reg_loss_distill += r_loss
+
+    class_loss_distill = args.cdc * (c_loss_distill/args.batch_size)
+    reg_loss_distill = args.rdc * (reg_loss_distill/args.batch_size)
+
+    return class_loss_distill, reg_loss_distill
 
 def train():
     if args.dataset == 'COCO':
@@ -112,7 +184,7 @@ def train():
                                                          MEANS))
 
     # eval data
-    testset = COCODetectionTesting(args.dataset_root, [('2017', 'val')], None)
+    # testset = COCODetectionTesting(args.dataset_root, [('2017', 'val')], None)
 
     output_folder = os.path.join(args.save_folder, args.exp_name)
     if not os.path.exists(output_folder):
@@ -126,6 +198,14 @@ def train():
     ssd_net = build_binary_ssd('train', cfg['min_dim'], cfg['num_classes'])
     net = ssd_net
 
+    args.distillation = True
+    # if distillation then load pretrained model
+    if args.distillation:
+        net_teacher, net = load_teacher_student(net, cfg)
+        #net_teacher = torch.nn.DataParallel(net_teacher)
+        #net_teacher = net_teacher.cuda()
+        #net_teacher.eval()
+
     if args.cuda:
         net = torch.nn.DataParallel(ssd_net)
         cudnn.benchmark = True
@@ -133,6 +213,13 @@ def train():
     if args.resume:
         print('Resuming training, loading {}...'.format(args.resume))
         ssd_net.load_weights(args.resume)
+
+    elif args.distillation:
+        # doing not loading the model here because the model needs to be loaded
+        # before nn.DataParallel for distillation. This is a bad way of doing
+        # it.
+        pass
+
     else:
         #vgg_weights = torch.load(args.save_folder + args.basenet)
         vgg_weights = torch.load('weights/' + args.basenet)
@@ -141,10 +228,14 @@ def train():
         print(vgg_weights.keys())
         ssd_net.vgg.load_state_dict(vgg_weights, strict=False)
 
+
+
+
     if args.cuda:
         net = net.cuda()
 
-    if not args.resume:
+
+    if not args.resume and not args.distillation:
         print('Initializing weights...')
         # initialize newly added layers' weights with xavier method
         ssd_net.extras.apply(weights_init)
@@ -182,17 +273,42 @@ def train():
                                   pin_memory=True)
     # create batch iterator
     batch_iterator = iter(data_loader)
+    checkpoint_suffixes = [x for x in range(5000, 399000, 5000)] + ["final"]
+    c = 0
     for iteration in range(args.start_iter, cfg['max_iter']):
+        if args.change_teacher and iteration%5000 == 0:
+            teacher_folder = 'results/SSD300_fp_teacher'
+            teacher_checkpoint_path = os.path.join(teacher_folder,
+                                               'ssd300_COCO_{}.pth'.format(checkpoint_suffixes[c]))
+            teacher_checkpoint = torch.load(teacher_checkpoint_path)
+            #new_dict = OrderedDict()
+            #for key in teacher_checkpoint.keys():
+            #    if 'module' not in key:
+            #        new_key = 'module.'+ key
+            #    else:
+            #        new_key = key
+            #    new_dict[key] = teacher_checkpoint[key]
+            net_teacher.load_state_dict(teacher_checkpoint)
+            net_teacher = torch.nn.DataParallel(net_teacher)
+            net_teacher = net_teacher.cuda()
+            net_teacher.eval()
+            c +=1
+            print("teacher checkpoint loaded for ", teacher_checkpoint_path)
+
         # if iteration < 4990:
         #    continue
         net.train()
+        '''
+        print('Logging 1')
         exp.log_metric('Current lr', float(optimizer.param_groups[0]['lr']))
         exp.log_metric('Current epoch', int(epoch))
         exp.log_metric('Current iteration', int(iteration))
+        print('Logging 1 done')
+        '''
 
-        print('Current lr', float(optimizer.param_groups[0]['lr']))
-        print('Current epoch', int(epoch))
-        print('Current iteration', int(iteration))
+        # print('Current lr', float(optimizer.param_groups[0]['lr']))
+        # print('Current epoch', int(epoch))
+        # print('Current iteration', int(iteration))
 
         if iteration != 0 and (iteration % epoch_size == 0):
             # update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
@@ -229,10 +345,23 @@ def train():
         # forward
         t0 = time.time()
         out = net(images)
+
+        #teacher forward pass
+        loss_cd = 0
+        loss_ld = 0
+        if args.distillation:
+            with torch.no_grad():
+                out_teacher = net_teacher(images)
+
+            # distillation
+            loss_cd, loss_ld =  nlm(out_teacher, out)
+
         # backprop
         optimizer.zero_grad()
         loss_l, loss_c = criterion(out, targets)
-        loss = loss_l + loss_c
+
+
+        loss = loss_l + loss_c + loss_cd + loss_ld
         loss.backward()
         optimizer.step()
         t1 = time.time()
@@ -241,13 +370,17 @@ def train():
         loc_loss += loss_l.item()
         conf_loss += loss_c.item()
 
-        exp.log_metric('loc loss', loss_l.item())
-        exp.log_metric('conf loss', loss_c.item())
-        exp.log_metric('total loss', loss.item())
-        print('loc loss', loss_l.item())
-        print('conf loss', loss_c.item())
-        print('total loss', loss.item())
-        print('---')
+        #print('logging 2')
+        exp.log_metric('loc loss', float(loss_l.item()))
+        exp.log_metric('conf loss', float(loss_c.item()))
+        exp.log_metric('total loss', float(loss.item()))
+        exp.log_metric('Distill Classification loss', float(loss_cd))
+        exp.log_metric('Distill Regression loss', float(loss_ld))
+        # print('logging 2 done')
+        # print('loc loss', loss_l.item())
+        # print('conf loss', loss_c.item())
+        # print('total loss', loss.item())
+        # print('---')
 
         if iteration % 10 == 0:
             print('timer: %.4f sec.' % (t1 - t0))
@@ -339,4 +472,7 @@ def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
 
 
 if __name__ == '__main__':
-    train()
+    try:
+        train()
+    except Exception as e:
+        print(e)
