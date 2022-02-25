@@ -52,7 +52,7 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='results/',
                     help='Directory for saving checkpoint models')
-parser.add_argument('--exp_name', default='distillation_SSD300_binary_student_backbone_no_skip',
+parser.add_argument('--exp_name', default='distillation_with_skip_teacher-Dis755_student-Dis804_SSD300_binary_student',
                     help='Name of the experiment folder in results/')
 parser.add_argument('--dataset', default='COCO', choices=['VOC', 'COCO'],
                     type=str, help='VOC or COCO')
@@ -131,16 +131,23 @@ def nlm(teacher, student):
     """
     #ic(teacher.shape)
     #ic(student.shape)
-
+    #print('in nlm')
     reg_output = student[0]
     reg_output_teacher = teacher[0]
     class_output = student[1]
     class_output_teacher = teacher[1]
 
+    #ic(reg_output.shape)
+    #ic(reg_output_teacher.shape)
+    #ic(class_output.shape)
+    #ic(class_output_teacher.shape)
+
     c_loss_distill = 0
     reg_loss_distill = 0
-    for i in range(args.batch_size):
+    for i in range(reg_output.shape[0]):
         if args.normalization:
+            #ic(i, args.batch_size)
+            #ic(class_output_teacher.shape)
             class_teacher = class_output_teacher[i]/ torch.norm(class_output_teacher[i])
             reg_teacher = reg_output_teacher[i] / torch.norm(reg_output_teacher[i])
             class_student = class_output[i] / torch.norm(class_output[i])
@@ -289,14 +296,12 @@ def train():
             #        new_key = key
             #    new_dict[key] = teacher_checkpoint[key]
             net_teacher.load_state_dict(teacher_checkpoint)
-            net_teacher = torch.nn.DataParallel(net_teacher)
+            #net_teacher = torch.nn.DataParallel(net_teacher)
             net_teacher = net_teacher.cuda()
             net_teacher.eval()
             c +=1
             print("teacher checkpoint loaded for ", teacher_checkpoint_path)
 
-        # if iteration < 4990:
-        #    continue
         net.train()
         '''
         print('Logging 1')
@@ -325,6 +330,7 @@ def train():
         try:
             images, targets = next(batch_iterator)
         except StopIteration:
+            print('in except')
             batch_iterator = iter(data_loader)
             images, targets = next(batch_iterator)
 
@@ -382,7 +388,7 @@ def train():
         # print('total loss', loss.item())
         # print('---')
 
-        if iteration % 10 == 0:
+        if iteration % 10000 == 0:
             print('timer: %.4f sec.' % (t1 - t0))
             #print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
             print(
@@ -472,7 +478,8 @@ def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
 
 
 if __name__ == '__main__':
-    try:
-        train()
-    except Exception as e:
-        print(e)
+    #try:
+    #    train()
+    #except Exception as e:
+    #    print(e)
+    train()
